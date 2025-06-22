@@ -81,7 +81,7 @@
 		ranges;
 		// stdout-path = "serial0:115200n8";
 		// stdout-path = "display0";
-		bootargs = "panic=30 loglevel=7 console=ttyS0,115200 console=tty1 rootfs_part=sda36 root=/dev/sda36 rw rootwait systemd.journald.forward_to_console=true systemd.log_level=debug systemd.log_target=kmsg log_buf_len=10M printk.devkmsg=on";
+		bootargs = "panic=30 loglevel=7 console=ttyS0,115200 console=tty1 rootfs_part=sda35 root=/dev/sda35 rw rootwait systemd.journald.forward_to_console=true systemd.log_level=debug systemd.log_target=kmsg log_buf_len=10M printk.devkmsg=on";
 		//  pd_ignore_unused clk_ignore_unused 
 		display0: framebuffer@9c000000 {
 			compatible = "simple-framebuffer";
