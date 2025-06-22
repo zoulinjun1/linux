@@ -67,13 +67,13 @@
 		#sound-dai-cells = <1>;
 	};
 
-	// battery: battery {
-	// 	compatible = "simple-battery";
-	// 	voltage-min-design-microvolt = <3400000>;
-	// 	voltage-max-design-microvolt = <4400000>;
-	// 	charge-full-design-microamp-hours = <4680000>;
-	// 	energy-full-design-microwatt-hours = <18400000>;
-	// };
+	 battery: battery {
+		compatible = "simple-battery";
+		voltage-min-design-microvolt = <3400000>;
+		voltage-max-design-microvolt = <4400000>;
+	        charge-full-design-microamp-hours = <4680000>;
+	 	energy-full-design-microwatt-hours = <18400000>;
+	 };
 
 	chosen {
 		#address-cells = <2>;
@@ -1144,10 +1144,10 @@
 	status = "okay";
 };
 
-// &slpi {
-// 	status = "okay";
-// 	firmware-name = "qcom/sm8250/umi/slpi.mbn";
-// };
+ &slpi {
+ 	status = "okay";
+ 	firmware-name = "qcom/sm8250/umi/slpi.mbn";
+ };
 
 &sound {
 	status = "okay";
