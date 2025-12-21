@@ -9,7 +9,7 @@ NAME = Baby Opossum Posse
 # To see a list of typical targets execute "make help"
 # More info can be located in ./README
 # Comments in this file are targeted only to the developer, do not
-# expect to learn how to build the kernel reading this file.
+# expect to learn how to build the kernel reading this file
 
 ifeq ($(filter output-sync,$(.FEATURES)),)
 $(error GNU Make >= 4.0 is required. Your Make version is $(MAKE_VERSION))
