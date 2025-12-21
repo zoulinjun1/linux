@@ -117,7 +117,9 @@ enum {
 enum {
 	BTINTEL_PCIE_CORE_HALTED,
 	BTINTEL_PCIE_HWEXP_INPROGRESS,
-	BTINTEL_PCIE_COREDUMP_INPROGRESS
+	BTINTEL_PCIE_COREDUMP_INPROGRESS,
+	BTINTEL_PCIE_RECOVERY_IN_PROGRESS,
+	BTINTEL_PCIE_SETUP_DONE
 };
 
 enum btintel_pcie_tlv_type {
@@ -130,6 +132,8 @@ enum btintel_pcie_tlv_type {
 	BTINTEL_CNVI_TOP,
 	BTINTEL_DUMP_TIME,
 	BTINTEL_FW_BUILD,
+	BTINTEL_VENDOR,
+	BTINTEL_DRIVER
 };
 
 /* causes for the MBOX interrupts */
@@ -154,8 +158,13 @@ enum msix_mbox_int_causes {
 /* Default interrupt timeout in msec */
 #define BTINTEL_DEFAULT_INTR_TIMEOUT_MS	3000
 
-/* The number of descriptors in TX/RX queues */
-#define BTINTEL_DESCS_COUNT	16
+#define BTINTEL_PCIE_DX_TRANSITION_MAX_RETRIES	3
+
+/* The number of descriptors in TX queues */
+#define BTINTEL_PCIE_TX_DESCS_COUNT	32
+
+/* The number of descriptors in RX queues */
+#define BTINTEL_PCIE_RX_DESCS_COUNT	64
 
 /* Number of Queue for TX and RX
  * It indicates the index of the IA(Index Array)
@@ -176,9 +185,6 @@ enum {
 
 /* Doorbell vector for TFD */
 #define BTINTEL_PCIE_TX_DB_VEC	0
-
-/* Number of pending RX requests for downlink */
-#define BTINTEL_PCIE_RX_MAX_QUEUE	6
 
 /* Doorbell vector for FRBD */
 #define BTINTEL_PCIE_RX_DB_VEC	513
@@ -460,6 +466,7 @@ struct btintel_pcie_dump_header {
  * @txq: TX Queue struct
  * @rxq: RX Queue struct
  * @alive_intr_ctxt: Alive interrupt context
+ * @pm_sx_event: PM event on which system got suspended
  */
 struct btintel_pcie_data {
 	struct pci_dev	*pdev;
@@ -509,6 +516,7 @@ struct btintel_pcie_data {
 	u32	alive_intr_ctxt;
 	struct btintel_pcie_dbgc	dbgc;
 	struct btintel_pcie_dump_header dmp_hdr;
+	u8	pm_sx_event;
 };
 
 static inline u32 btintel_pcie_rd_reg32(struct btintel_pcie_data *data,

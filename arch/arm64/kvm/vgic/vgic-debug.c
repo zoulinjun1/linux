@@ -64,17 +64,21 @@ static void iter_next(struct kvm *kvm, struct vgic_state_iter *iter)
 static int iter_mark_lpis(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
+	unsigned long intid, flags;
 	struct vgic_irq *irq;
-	unsigned long intid;
 	int nr_lpis = 0;
 
+	xa_lock_irqsave(&dist->lpi_xa, flags);
+
 	xa_for_each(&dist->lpi_xa, intid, irq) {
-		if (!vgic_try_get_irq_kref(irq))
+		if (!vgic_try_get_irq_ref(irq))
 			continue;
 
-		xa_set_mark(&dist->lpi_xa, intid, LPI_XA_MARK_DEBUG_ITER);
+		__xa_set_mark(&dist->lpi_xa, intid, LPI_XA_MARK_DEBUG_ITER);
 		nr_lpis++;
 	}
+
+	xa_unlock_irqrestore(&dist->lpi_xa, flags);
 
 	return nr_lpis;
 }
@@ -82,11 +86,15 @@ static int iter_mark_lpis(struct kvm *kvm)
 static void iter_unmark_lpis(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
+	unsigned long intid, flags;
 	struct vgic_irq *irq;
-	unsigned long intid;
 
 	xa_for_each_marked(&dist->lpi_xa, intid, irq, LPI_XA_MARK_DEBUG_ITER) {
-		xa_clear_mark(&dist->lpi_xa, intid, LPI_XA_MARK_DEBUG_ITER);
+		xa_lock_irqsave(&dist->lpi_xa, flags);
+		__xa_clear_mark(&dist->lpi_xa, intid, LPI_XA_MARK_DEBUG_ITER);
+		xa_unlock_irqrestore(&dist->lpi_xa, flags);
+
+		/* vgic_put_irq() expects to be called outside of the xa_lock */
 		vgic_put_irq(kvm, irq);
 	}
 }
@@ -490,6 +498,9 @@ static int vgic_its_debug_show(struct seq_file *s, void *v)
 	struct its_device *dev = iter->dev;
 	struct its_ite *ite = iter->ite;
 
+	if (!ite)
+		return 0;
+
 	if (list_is_first(&ite->ite_list, &dev->itt_head)) {
 		seq_printf(s, "\n");
 		seq_printf(s, "Device ID: 0x%x, Event ID Range: [0 - %llu]\n",
@@ -498,7 +509,7 @@ static int vgic_its_debug_show(struct seq_file *s, void *v)
 		seq_printf(s, "-----------------------------------------------\n");
 	}
 
-	if (ite && ite->irq && ite->collection) {
+	if (ite->irq && ite->collection) {
 		seq_printf(s, "%8u %8u %8u %8u %8u %2d\n",
 			   ite->event_id, ite->irq->intid, ite->irq->hwintid,
 			   ite->collection->target_addr,

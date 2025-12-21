@@ -10,6 +10,10 @@
 #error This file should only be included in vmlinux.lds.S
 #endif
 
+#if defined(CONFIG_LD_IS_LLD) && CONFIG_LLD_VERSION < 210000
+#define ASSERT(...)
+#endif
+
 #define PI_EXPORT_SYM(sym)		\
 	__PI_EXPORT_SYM(sym, __pi_ ## sym, Cannot export BSS symbol sym to startup code)
 #define __PI_EXPORT_SYM(sym, pisym, msg)\
@@ -87,6 +91,7 @@ KVM_NVHE_ALIAS(spectre_bhb_patch_loop_mitigation_enable);
 KVM_NVHE_ALIAS(spectre_bhb_patch_wa3);
 KVM_NVHE_ALIAS(spectre_bhb_patch_clearbhb);
 KVM_NVHE_ALIAS(alt_cb_patch_nops);
+KVM_NVHE_ALIAS(kvm_compute_ich_hcr_trap_bits);
 
 /* Global kernel state accessed by nVHE hyp code. */
 KVM_NVHE_ALIAS(kvm_vgic_global_state);
@@ -100,6 +105,9 @@ KVM_NVHE_ALIAS(__hyp_stub_vectors);
 /* Static keys which are set if a vGIC trap should be handled in hyp. */
 KVM_NVHE_ALIAS(vgic_v2_cpuif_trap);
 KVM_NVHE_ALIAS(vgic_v3_cpuif_trap);
+
+/* Static key indicating whether GICv3 has GICv2 compatibility */
+KVM_NVHE_ALIAS(vgic_v3_has_v2_compat);
 
 /* Static key which is set if CNTVOFF_EL2 is unusable */
 KVM_NVHE_ALIAS(broken_cntvoff_key);
@@ -139,5 +147,18 @@ KVM_NVHE_ALIAS(kvm_protected_mode_initialized);
 #ifdef CONFIG_EFI_ZBOOT
 _kernel_codesize = ABSOLUTE(__inittext_end - _text);
 #endif
+
+/*
+ * LLD will occasionally error out with a '__init_end does not converge' error
+ * if INIT_IDMAP_DIR_SIZE is defined in terms of _end, as this results in a
+ * circular dependency. Counter this by dimensioning the initial IDMAP page
+ * tables based on kimage_limit, which is defined such that its value should
+ * not change as a result of the initdata segment being pushed over a 64k
+ * segment boundary due to changes in INIT_IDMAP_DIR_SIZE, provided that its
+ * value doesn't change by more than 2M between linker passes.
+ */
+kimage_limit = ALIGN(ABSOLUTE(_end + SZ_64K), SZ_2M);
+
+#undef ASSERT
 
 #endif /* __ARM64_KERNEL_IMAGE_VARS_H */

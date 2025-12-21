@@ -60,7 +60,7 @@ int get_unalign_ctl(struct task_struct *tsk, unsigned long adr)
 	if (!unaligned_ctl_available())
 		return -EINVAL;
 
-	return put_user(tsk->thread.align_ctl, (unsigned long __user *)adr);
+	return put_user(tsk->thread.align_ctl, (unsigned int __user *)adr);
 }
 
 void __show_regs(struct pt_regs *regs)
@@ -223,7 +223,7 @@ asmlinkage void ret_from_fork_user(struct pt_regs *regs)
 
 int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 {
-	unsigned long clone_flags = args->flags;
+	u64 clone_flags = args->flags;
 	unsigned long usp = args->stack;
 	unsigned long tls = args->tls;
 	struct pt_regs *childregs = task_pt_regs(p);

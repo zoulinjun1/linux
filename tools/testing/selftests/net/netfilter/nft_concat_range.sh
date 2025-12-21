@@ -29,7 +29,7 @@ TYPES="net_port port_net net6_port port_proto net6_port_mac net6_port_mac_proto
        net6_port_net6_port net_port_mac_proto_net"
 
 # Reported bugs, also described by TYPE_ variables below
-BUGS="flush_remove_add reload net_port_proto_match avx2_mismatch"
+BUGS="flush_remove_add reload net_port_proto_match avx2_mismatch doublecreate"
 
 # List of possible paths to pktgen script from kernel tree for performance tests
 PKTGEN_SCRIPT_PATHS="
@@ -378,7 +378,7 @@ display		net,port,proto
 type_spec	ipv4_addr . inet_service . inet_proto
 chain_spec	ip daddr . udp dport . meta l4proto
 dst		addr4 port proto
-src
+src		 
 start		1
 count		9
 src_delta	9
@@ -408,6 +408,18 @@ perf_duration	0
 "
 
 
+TYPE_doublecreate="
+display		cannot create same element twice
+type_spec	ipv4_addr . ipv4_addr
+chain_spec	ip saddr . ip daddr
+dst		addr4
+proto		icmp
+
+race_repeat	0
+
+perf_duration	0
+"
+
 # Set template for all tests, types and rules are filled in depending on test
 set_template='
 flush ruleset
@@ -419,6 +431,7 @@ table inet filter {
 
 	set test {
 		type ${type_spec}
+		counter
 		flags interval,timeout
 	}
 
@@ -1158,8 +1171,17 @@ del() {
 	fi
 }
 
-# Return packet count from 'test' counter in 'inet filter' table
+# Return packet count for elem $1 from 'test' counter in 'inet filter' table
 count_packets() {
+	found=0
+	for token in $(nft reset element inet filter test "${1}" ); do
+		[ ${found} -eq 1 ] && echo "${token}" && return
+		[ "${token}" = "packets" ] && found=1
+	done
+}
+
+# Return packet count from 'test' counter in 'inet filter' table
+count_packets_nomatch() {
 	found=0
 	for token in $(nft list counter inet filter test); do
 		[ ${found} -eq 1 ] && echo "${token}" && return
@@ -1206,6 +1228,10 @@ perf() {
 
 # Set MAC addresses, send single packet, check that it matches, reset counter
 send_match() {
+	local elem="$1"
+
+	shift
+
 	ip link set veth_a address "$(format_mac "${1}")"
 	ip -n B link set veth_b address "$(format_mac "${2}")"
 
@@ -1216,7 +1242,7 @@ send_match() {
 		eval src_"$f"=\$\(format_\$f "${2}"\)
 	done
 	eval send_\$proto
-	if [ "$(count_packets)" != "1" ]; then
+	if [ "$(count_packets "$elem")" != "1" ]; then
 		err "${proto} packet to:"
 		err "  $(for f in ${dst}; do
 			 eval format_\$f "${1}"; printf ' '; done)"
@@ -1242,7 +1268,7 @@ send_nomatch() {
 		eval src_"$f"=\$\(format_\$f "${2}"\)
 	done
 	eval send_\$proto
-	if [ "$(count_packets)" != "0" ]; then
+	if [ "$(count_packets_nomatch)" != "0" ]; then
 		err "${proto} packet to:"
 		err "  $(for f in ${dst}; do
 			 eval format_\$f "${1}"; printf ' '; done)"
@@ -1255,13 +1281,54 @@ send_nomatch() {
 	fi
 }
 
+maybe_send_nomatch() {
+	local elem="$1"
+	local what="$4"
+
+	[ $((RANDOM%20)) -gt 0 ] && return
+
+	dst_addr4="$2"
+	dst_port="$3"
+	send_udp
+
+	if [ "$(count_packets_nomatch)" != "0" ]; then
+		err "Packet to $dst_addr4:$dst_port did match $what"
+		err "$(nft -a list ruleset)"
+		return 1
+	fi
+}
+
+maybe_send_match() {
+	local elem="$1"
+	local what="$4"
+
+	[ $((RANDOM%20)) -gt 0 ] && return
+
+	dst_addr4="$2"
+	dst_port="$3"
+	send_udp
+
+	if [ "$(count_packets "{ $elem }")" != "1" ]; then
+		err "Packet to $dst_addr4:$dst_port did not match $what"
+		err "$(nft -a list ruleset)"
+		return 1
+	fi
+	nft reset counter inet filter test >/dev/null
+	nft reset element inet filter test "{ $elem }" >/dev/null
+}
+
 # Correctness test template:
 # - add ranged element, check that packets match it
 # - check that packets outside range don't match it
 # - remove some elements, check that packets don't match anymore
 test_correctness_main() {
 	range_size=1
+
+	send_nomatch $((end + 1)) $((end + 1 + src_delta)) || return 1
+
 	for i in $(seq "${start}" $((start + count))); do
+		local elem=""
+
 		end=$((start + range_size))
 
 		# Avoid negative or zero-sized port ranges
@@ -1272,15 +1339,16 @@ test_correctness_main() {
 		srcstart=$((start + src_delta))
 		srcend=$((end + src_delta))
 
-		add "$(format)" || return 1
+		elem="$(format)"
+		add "$elem" || return 1
 		for j in $(seq "$start" $((range_size / 2 + 1)) ${end}); do
-			send_match "${j}" $((j + src_delta)) || return 1
+			send_match "$elem" "${j}" $((j + src_delta)) || return 1
 		done
 		send_nomatch $((end + 1)) $((end + 1 + src_delta)) || return 1
 
 		# Delete elements now and then
 		if [ $((i % 3)) -eq 0 ]; then
-			del "$(format)" || return 1
+			del "$elem" || return 1
 			for j in $(seq "$start" \
 				   $((range_size / 2 + 1)) ${end}); do
 				send_nomatch "${j}" $((j + src_delta)) \
@@ -1572,14 +1640,17 @@ test_timeout() {
 
 	range_size=1
 	for i in $(seq "$start" $((start + count))); do
+		local elem=""
+
 		end=$((start + range_size))
 		srcstart=$((start + src_delta))
 		srcend=$((end + src_delta))
 
-		add "$(format)" || return 1
+		elem="$(format)"
+		add "$elem" || return 1
 
 		for j in $(seq "$start" $((range_size / 2 + 1)) ${end}); do
-			send_match "${j}" $((j + src_delta)) || return 1
+			send_match "$elem" "${j}" $((j + src_delta)) || return 1
 		done
 
 		range_size=$((range_size + 1))
@@ -1737,7 +1808,7 @@ test_bug_reload() {
 		srcend=$((end + src_delta))
 
 		for j in $(seq "$start" $((range_size / 2 + 1)) ${end}); do
-			send_match "${j}" $((j + src_delta)) || return 1
+			send_match "$(format)" "${j}" $((j + src_delta)) || return 1
 		done
 
 		range_size=$((range_size + 1))
@@ -1756,22 +1827,34 @@ test_bug_net_port_proto_match() {
 	range_size=1
 	for i in $(seq 1 10); do
 		for j in $(seq 1 20) ; do
-			elem=$(printf "10.%d.%d.0/24 . %d1-%d0 . 6-17 " ${i} ${j} ${i} "$((i+1))")
+			local dport=$j
+
+			elem=$(printf "10.%d.%d.0/24 . %d-%d0 . 6-17 " ${i} ${j} ${dport} "$((dport+1))")
+
+			# too slow, do not test all addresses
+			maybe_send_nomatch "$elem" $(printf "10.%d.%d.1" $i $j) $(printf "%d1" $((dport+1))) "before add" || return 1
 
 			nft "add element inet filter test { $elem }" || return 1
+
+			maybe_send_match "$elem" $(printf "10.%d.%d.1" $i $j) $(printf "%d" $dport) "after add" || return 1
+
 			nft "get element inet filter test { $elem }" | grep -q "$elem"
 			if [ $? -ne 0 ];then
 				local got=$(nft "get element inet filter test { $elem }")
 				err "post-add: should have returned $elem but got $got"
 				return 1
 			fi
+
+			maybe_send_nomatch "$elem" $(printf "10.%d.%d.1" $i $j) $(printf "%d1" $((dport+1))) "out-of-range" || return 1
 		done
 	done
 
 	# recheck after set was filled
 	for i in $(seq 1 10); do
 		for j in $(seq 1 20) ; do
-			elem=$(printf "10.%d.%d.0/24 . %d1-%d0 . 6-17 " ${i} ${j} ${i} "$((i+1))")
+			local dport=$j
+
+			elem=$(printf "10.%d.%d.0/24 . %d-%d0 . 6-17 " ${i} ${j} ${dport} "$((dport+1))")
 
 			nft "get element inet filter test { $elem }" | grep -q "$elem"
 			if [ $? -ne 0 ];then
@@ -1779,6 +1862,9 @@ test_bug_net_port_proto_match() {
 				err "post-fill: should have returned $elem but got $got"
 				return 1
 			fi
+
+			maybe_send_match "$elem" $(printf "10.%d.%d.1" $i $j) $(printf "%d" $dport) "recheck" || return 1
+			maybe_send_nomatch "$elem" $(printf "10.%d.%d.1" $i $j) $(printf "%d1" $((dport+1))) "recheck out-of-range" || return 1
 		done
 	done
 
@@ -1786,9 +1872,10 @@ test_bug_net_port_proto_match() {
 	for i in $(seq 1 10); do
 		for j in $(seq 1 20) ; do
 			local rnd=$((RANDOM%10))
+			local dport=$j
 			local got=""
 
-			elem=$(printf "10.%d.%d.0/24 . %d1-%d0 . 6-17 " ${i} ${j} ${i} "$((i+1))")
+			elem=$(printf "10.%d.%d.0/24 . %d-%d0 . 6-17 " ${i} ${j} ${dport} "$((dport+1))")
 			if [ $rnd -gt 0 ];then
 				continue
 			fi
@@ -1799,6 +1886,8 @@ test_bug_net_port_proto_match() {
 				err "post-delete: query for $elem returned $got instead of error."
 				return 1
 			fi
+
+			maybe_send_nomatch "$elem" $(printf "10.%d.%d.1" $i $j) $(printf "%d" $dport) "match after deletion" || return 1
 		done
 	done
 
@@ -1817,10 +1906,52 @@ test_bug_avx2_mismatch()
 	dst_addr6="$a2"
 	send_icmp6
 
-	if [ "$(count_packets)" -gt "0" ]; then
+	if [ "$(count_packets "{ icmpv6 . $a1 }")" -gt "0" ]; then
 		err "False match for $a2"
 		return 1
 	fi
+}
+
+test_bug_doublecreate()
+{
+	local elements="1.2.3.4 . 1.2.4.1, 1.2.4.1 . 1.2.3.4"
+	local ret=1
+	local i
+
+	setup veth send_"${proto}" set || return ${ksft_skip}
+
+	add "{ $elements }" || return 1
+	# expected to work: 'add' on existing should be no-op.
+	add "{ $elements }" || return 1
+
+	# 'create' should return an error.
+	if nft create element inet filter test "{ $elements }" 2>/dev/null; then
+		err "Could create an existing element"
+		return 1
+	fi
+nft -f - <<EOF 2>/dev/null
+flush set inet filter test
+create element inet filter test { $elements }
+create element inet filter test { $elements }
+EOF
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		err "Could create element twice in one transaction"
+		err "$(nft -a list ruleset)"
+		return 1
+	fi
+
+nft -f - <<EOF 2>/dev/null
+flush set inet filter test
+create element inet filter test { $elements }
+EOF
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		err "Could not flush and re-create element in one transaction"
+		return 1
+	fi
+
+	return 0
 }
 
 test_reported_issues() {

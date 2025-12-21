@@ -200,7 +200,7 @@ static inline pte_t pte_mkyoung(pte_t pte)
 	return pte;
 }
 
-static inline int pte_swp_exclusive(pte_t pte)
+static inline bool pte_swp_exclusive(pte_t pte)
 {
 	return pte_val(pte) & _PAGE_SWP_EXCLUSIVE;
 }
@@ -262,8 +262,5 @@ void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
 		unsigned long address, pte_t *pte, unsigned int nr);
 #define update_mmu_cache(vma, addr, ptep) \
 	update_mmu_cache_range(NULL, vma, addr, ptep, 1)
-
-#define io_remap_pfn_range(vma, vaddr, pfn, size, prot) \
-	remap_pfn_range(vma, vaddr, pfn, size, prot)
 
 #endif /* __ASM_CSKY_PGTABLE_H */

@@ -29,6 +29,7 @@
 
 #include <linux/arch_topology.h>
 #include <linux/cpumask.h>
+#include <linux/nodemask.h>
 #include <linux/bitops.h>
 #include <linux/mmzone.h>
 #include <linux/smp.h>
@@ -38,10 +39,6 @@
 #ifndef nr_cpus_node
 #define nr_cpus_node(node) cpumask_weight(cpumask_of_node(node))
 #endif
-
-#define for_each_node_with_cpus(node)			\
-	for_each_online_node(node)			\
-		if (nr_cpus_node(node))
 
 int arch_update_cpu_topology(void);
 
@@ -263,7 +260,7 @@ static inline bool topology_is_primary_thread(unsigned int cpu)
 
 #endif
 
-static inline const struct cpumask *cpu_cpu_mask(int cpu)
+static inline const struct cpumask *cpu_node_mask(int cpu)
 {
 	return cpumask_of_node(cpu_to_node(cpu));
 }

@@ -113,6 +113,8 @@ struct amdgpu_umc_ras {
 	uint32_t (*get_die_id_from_pa)(struct amdgpu_device *adev,
 			uint64_t mca_addr, uint64_t retired_page);
 	void (*get_retire_flip_bits)(struct amdgpu_device *adev);
+	void (*mca_ipid_parse)(struct amdgpu_device *adev, uint64_t ipid,
+			uint32_t *did, uint32_t *ch, uint32_t *umc_inst, uint32_t *sid);
 };
 
 struct amdgpu_umc_funcs {
@@ -189,4 +191,6 @@ int amdgpu_umc_mca_to_addr(struct amdgpu_device *adev,
 			uint64_t err_addr, uint32_t ch, uint32_t umc,
 			uint32_t node, uint32_t socket,
 			struct ta_ras_query_address_output *addr_out, bool dump_addr);
+int amdgpu_umc_pa2mca(struct amdgpu_device *adev,
+		uint64_t pa, uint64_t *mca, enum amdgpu_memory_partition nps);
 #endif

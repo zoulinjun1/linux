@@ -585,7 +585,8 @@ enum hal_reo_cmd_type {
  *			 or cache was blocked
  * @HAL_REO_CMD_FAILED: Command execution failed, could be due to
  *			invalid queue desc
- * @HAL_REO_CMD_RESOURCE_BLOCKED:
+ * @HAL_REO_CMD_RESOURCE_BLOCKED: Command could not be executed because
+ *				  one or more descriptors were blocked
  * @HAL_REO_CMD_DRAIN:
  */
 enum hal_reo_cmd_status {
@@ -831,6 +832,7 @@ enum hal_rx_buf_return_buf_manager {
 #define HAL_REO_CMD_FLG_FLUSH_ALL		BIT(6)
 #define HAL_REO_CMD_FLG_UNBLK_RESOURCE		BIT(7)
 #define HAL_REO_CMD_FLG_UNBLK_CACHE		BIT(8)
+#define HAL_REO_CMD_FLG_FLUSH_QUEUE_1K_DESC	BIT(9)
 
 /* Should be matching with HAL_REO_UPD_RX_QUEUE_INFO0_UPD_* fields */
 #define HAL_REO_CMD_UPD0_RX_QUEUE_NUM		BIT(8)

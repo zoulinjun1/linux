@@ -10,6 +10,7 @@
 #include "shm_channel.h"
 
 #define GDMA_STATUS_MORE_ENTRIES	0x00000105
+#define GDMA_STATUS_CMD_UNSUPPORTED	0xffffffff
 
 /* Structures labeled with "HW DATA" are exchanged with the hardware. All of
  * them are naturally aligned and hence don't need __packed.
@@ -58,9 +59,10 @@ enum gdma_eqe_type {
 	GDMA_EQE_HWC_INIT_EQ_ID_DB	= 129,
 	GDMA_EQE_HWC_INIT_DATA		= 130,
 	GDMA_EQE_HWC_INIT_DONE		= 131,
-	GDMA_EQE_HWC_SOC_RECONFIG	= 132,
+	GDMA_EQE_HWC_FPGA_RECONFIG	= 132,
 	GDMA_EQE_HWC_SOC_RECONFIG_DATA	= 133,
 	GDMA_EQE_HWC_SOC_SERVICE	= 134,
+	GDMA_EQE_HWC_RESET_REQUEST	= 135,
 	GDMA_EQE_RNIC_QP_FATAL		= 176,
 };
 
@@ -380,6 +382,10 @@ struct gdma_irq_context {
 	char name[MANA_IRQ_NAME_SZ];
 };
 
+enum gdma_context_flags {
+	GC_PROBE_SUCCEEDED	= 0,
+};
+
 struct gdma_context {
 	struct device		*dev;
 	struct dentry		*mana_pci_debugfs;
@@ -388,7 +394,7 @@ struct gdma_context {
 	unsigned int		max_num_queues;
 	unsigned int		max_num_msix;
 	unsigned int		num_msix_usable;
-	struct gdma_irq_context	*irq_contexts;
+	struct xarray		irq_contexts;
 
 	/* L2 MTU */
 	u16 adapter_mtu;
@@ -403,6 +409,8 @@ struct gdma_context {
 	u32			test_event_eq_id;
 
 	bool			is_pf;
+	bool			in_service;
+
 	phys_addr_t		bar0_pa;
 	void __iomem		*bar0_va;
 	void __iomem		*shm_base;
@@ -426,6 +434,8 @@ struct gdma_context {
 	u64 pf_cap_flags1;
 
 	struct workqueue_struct *service_wq;
+
+	unsigned long		flags;
 };
 
 static inline bool mana_gd_is_mana(struct gdma_dev *gd)
@@ -481,6 +491,8 @@ struct gdma_wqe {
 
 #define INLINE_OOB_SMALL_SIZE 8
 #define INLINE_OOB_LARGE_SIZE 24
+
+#define MANA_MAX_TX_WQE_SGL_ENTRIES 30
 
 #define MAX_TX_WQE_SIZE 512
 #define MAX_RX_WQE_SIZE 256
@@ -578,12 +590,38 @@ enum {
 /* Driver can handle holes (zeros) in the device list */
 #define GDMA_DRV_CAP_FLAG_1_DEV_LIST_HOLES_SUP BIT(11)
 
+/* Driver supports dynamic MSI-X vector allocation */
+#define GDMA_DRV_CAP_FLAG_1_DYNAMIC_IRQ_ALLOC_SUPPORT BIT(13)
+
+/* Driver can self reset on EQE notification */
+#define GDMA_DRV_CAP_FLAG_1_SELF_RESET_ON_EQE BIT(14)
+
+/* Driver can self reset on FPGA Reconfig EQE notification */
+#define GDMA_DRV_CAP_FLAG_1_HANDLE_RECONFIG_EQE BIT(17)
+#define GDMA_DRV_CAP_FLAG_1_HW_VPORT_LINK_AWARE BIT(6)
+
+/* Driver supports linearizing the skb when num_sge exceeds hardware limit */
+#define GDMA_DRV_CAP_FLAG_1_SKB_LINEARIZE BIT(20)
+
+/* Driver can send HWC periodically to query stats */
+#define GDMA_DRV_CAP_FLAG_1_PERIODIC_STATS_QUERY BIT(21)
+
+/* Driver can handle hardware recovery events during probe */
+#define GDMA_DRV_CAP_FLAG_1_PROBE_RECOVERY BIT(22)
+
 #define GDMA_DRV_CAP_FLAGS1 \
 	(GDMA_DRV_CAP_FLAG_1_EQ_SHARING_MULTI_VPORT | \
 	 GDMA_DRV_CAP_FLAG_1_NAPI_WKDONE_FIX | \
 	 GDMA_DRV_CAP_FLAG_1_HWC_TIMEOUT_RECONFIG | \
 	 GDMA_DRV_CAP_FLAG_1_VARIABLE_INDIRECTION_TABLE_SUPPORT | \
-	 GDMA_DRV_CAP_FLAG_1_DEV_LIST_HOLES_SUP)
+	 GDMA_DRV_CAP_FLAG_1_DEV_LIST_HOLES_SUP | \
+	 GDMA_DRV_CAP_FLAG_1_DYNAMIC_IRQ_ALLOC_SUPPORT | \
+	 GDMA_DRV_CAP_FLAG_1_SELF_RESET_ON_EQE | \
+	 GDMA_DRV_CAP_FLAG_1_HANDLE_RECONFIG_EQE | \
+	 GDMA_DRV_CAP_FLAG_1_HW_VPORT_LINK_AWARE | \
+	 GDMA_DRV_CAP_FLAG_1_PERIODIC_STATS_QUERY | \
+	 GDMA_DRV_CAP_FLAG_1_SKB_LINEARIZE | \
+	 GDMA_DRV_CAP_FLAG_1_PROBE_RECOVERY)
 
 #define GDMA_DRV_CAP_FLAGS2 0
 
@@ -909,5 +947,10 @@ void mana_register_debugfs(void);
 void mana_unregister_debugfs(void);
 
 int mana_rdma_service_event(struct gdma_context *gc, enum gdma_service_type event);
+
+int mana_gd_suspend(struct pci_dev *pdev, pm_message_t state);
+int mana_gd_resume(struct pci_dev *pdev);
+
+bool mana_need_log(struct gdma_context *gc, int err);
 
 #endif /* _GDMA_H */

@@ -16,8 +16,7 @@
  *   Thomas Klein
  */
 
-#define KMSG_COMPONENT "zpci"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "zpci: " fmt
 
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -709,6 +708,12 @@ int zpci_reenable_device(struct zpci_dev *zdev)
 	if (rc)
 		return rc;
 
+	if (zdev->msi_nr_irqs > 0) {
+		rc = zpci_set_irq(zdev);
+		if (rc)
+			return rc;
+	}
+
 	rc = zpci_iommu_register_ioat(zdev, &status);
 	if (rc)
 		zpci_disable_device(zdev);
@@ -1185,6 +1190,10 @@ static int __init pci_base_init(void)
 		goto out_irq;
 
 	rc = zpci_scan_devices();
+	if (rc)
+		goto out_find;
+
+	rc = zpci_fw_sysfs_init();
 	if (rc)
 		goto out_find;
 

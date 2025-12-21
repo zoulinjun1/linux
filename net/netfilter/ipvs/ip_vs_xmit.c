@@ -21,8 +21,7 @@
  * - the only place where we can see skb->sk != NULL
  */
 
-#define KMSG_COMPONENT "IPVS"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "IPVS: " fmt
 
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -97,7 +96,7 @@ __ip_vs_dst_check(struct ip_vs_dest *dest)
 	if (!dest_dst)
 		return NULL;
 	dst = dest_dst->dst_cache;
-	if (dst->obsolete &&
+	if (READ_ONCE(dst->obsolete) &&
 	    dst->ops->check(dst, dest_dst->dst_cookie) == NULL)
 		return NULL;
 	return dest_dst;

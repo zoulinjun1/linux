@@ -768,18 +768,10 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_export, "DMA_BUF");
  */
 int dma_buf_fd(struct dma_buf *dmabuf, int flags)
 {
-	int fd;
-
 	if (!dmabuf || !dmabuf->file)
 		return -EINVAL;
 
-	fd = get_unused_fd_flags(flags);
-	if (fd < 0)
-		return fd;
-
-	fd_install(fd, dmabuf->file);
-
-	return fd;
+	return FD_ADD(flags, dmabuf->file);
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_fd, "DMA_BUF");
 
@@ -1118,7 +1110,7 @@ struct sg_table *dma_buf_map_attachment(struct dma_buf_attachment *attach,
 		 * Catch exporters making buffers inaccessible even when
 		 * attachments preventing that exist.
 		 */
-		WARN_ON_ONCE(ret == EBUSY);
+		WARN_ON_ONCE(ret == -EBUSY);
 		if (ret)
 			return ERR_PTR(ret);
 	}

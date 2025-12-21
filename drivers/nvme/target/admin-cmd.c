@@ -708,7 +708,7 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 
 	/*
 	 * We don't really have a practical limit on the number of abort
-	 * comands.  But we don't do anything useful for abort either, so
+	 * commands.  But we don't do anything useful for abort either, so
 	 * no point in allowing more abort commands than the spec requires.
 	 */
 	id->acl = 3;
@@ -1165,7 +1165,7 @@ static void nvmet_execute_identify(struct nvmet_req *req)
  * A "minimum viable" abort implementation: the command is mandatory in the
  * spec, but we are not required to do any useful work.  We couldn't really
  * do a useful abort, so don't bother even with waiting for the command
- * to be exectuted and return immediately telling the command to abort
+ * to be executed and return immediately telling the command to abort
  * wasn't found.
  */
 static void nvmet_execute_abort(struct nvmet_req *req)
